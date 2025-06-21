@@ -1,0 +1,41 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      chokidar:
+        specifier: ^4.0.3
+        version: 4.0.3
+      zx:
+        specifier: ^8.5.5
+        version: 8.5.5
+
+packages:
+
+  chokidar@4.0.3:
+    resolution: {integrity: sha512-Qgzu8kfBvo+cA4962jnP1KkS6Dop5NS6g7R5LFYJr4b8Ub94PPQXUksCw9PvXoeXPRRddRNC5C1JQUR2SMGtnA==}
+    engines: {node: '>= 14.16.0'}
+
+  readdirp@4.1.2:
+    resolution: {integrity: sha512-GDhwkLfywWL2s6vEjyhri+eXmfH6j1L7JE27WhqLeYzoh/A3DBaYGEj2H/HFZCn/kMfim73FXxEJTw06WtxQwg==}
+    engines: {node: '>= 14.18.0'}
+
+  zx@8.5.5:
+    resolution: {integrity: sha512-kzkjV3uqyEthw1IBDbA7Co2djji77vCP1DRvt58aYSMwiX4nyvAkFE8OBSEsOUbDJAst0Yo4asNvMTGG5HGPXA==}
+    engines: {node: '>= 12.17.0'}
+    hasBin: true
+
+snapshots:
+
+  chokidar@4.0.3:
+    dependencies:
+      readdirp: 4.1.2
+
+  readdirp@4.1.2: {}
+
+  zx@8.5.5: {}

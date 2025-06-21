@@ -1,0 +1,18 @@
+{
+  "name": "ha-inim-cloud",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "LacheRo`",
+  "license": "MIT",
+  "packageManager": "pnpm@10.10.0",
+  "type": "module",
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "zx": "^8.5.5"
+  }
+}
