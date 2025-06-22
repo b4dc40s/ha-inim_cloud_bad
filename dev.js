@@ -16,6 +16,7 @@ async function handleChange(event, path) {
 	await $`docker cp ${src}/. ${containerName}:${target}`;
 
 	await $`docker exec -w /workspaces/ha-core ${containerName} pkill -f "python -m homeassistant -c ./config"`.catch(() => {});
+	await $`docker exec -w /workspaces/ha-core ${containerName} pkill -f "/usr/bin/go2rtc"`.catch(() => {});
 	await $`docker exec -d -w /workspaces/ha-core ${containerName} /home/vscode/.local/ha-venv/bin/python -m homeassistant -c ./config`;
 	console.log('Home Assistant service restarted.');
 }

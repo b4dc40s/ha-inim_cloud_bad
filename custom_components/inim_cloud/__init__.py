@@ -7,17 +7,20 @@ from datetime import datetime, timedelta
 import logging
 from typing import Any
 
+import async_timeout
+import aiohttp
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed
 
-from .api import InimCloudAPI, InimCloudAuthError
-from .const import CONF_PASSWORD, CONF_PIN, CONF_USERNAME, COORDINATOR, DOMAIN
+from .api import InimCloudAPI, InimCloudAuthError, InimCloudError
+from .const import CONF_PASSWORD, CONF_USERNAME, COORDINATOR, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-# List of platforms to support
 PLATFORMS = [Platform.ALARM_CONTROL_PANEL]
 
 
@@ -27,7 +30,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.info("Setting up Inim Cloud integration")
 
-    # Initialize API client with existing token if available
+    client_id = entry.data.get("client_id")
     token = entry.data.get("token")
     token_expiry = None
 
@@ -37,60 +40,69 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except (ValueError, TypeError):
             token_expiry = None
 
-    api = InimCloudAPI(token=token, token_expiry=token_expiry)
+    api = InimCloudAPI(
+        hass, client_id=client_id, token=token, token_expiry=token_expiry
+    )
 
-    # Try to use existing token or re-authenticate if needed
     need_auth = True
-
     if api.is_token_valid():
-        # Token looks valid based on expiry time, verify with API
         try:
             if await api.validate_token():
-                _LOGGER.info("Using existing valid token")
+                _LOGGER.debug("Using existing valid token")
                 need_auth = False
         except Exception as ex:
             _LOGGER.warning("Token validation failed: %s", ex)
 
-    # if need_auth:
-    # try:
-    #     _LOGGER.info("Token expired or invalid, re-authenticating")
-    #     auth_data = await api.authenticate(
-    #         entry.data[CONF_USERNAME],
-    #         entry.data[CONF_PASSWORD],
-    #         entry.data[CONF_PIN],
-    #     )
+    if need_auth:
+        try:
+            _LOGGER.debug("Token expired or invalid, re-authenticating")
+            auth_data = await api.authenticate(
+                entry.data[CONF_USERNAME],
+                entry.data[CONF_PASSWORD],
+            )
 
-    #     # Update the stored token in config entry
-    #     new_data = {
-    #         **entry.data,
-    #         "token": auth_data.get("Token"),
-    #         "token_id": auth_data.get("TokenId"),
-    #         "token_expiry": (
-    #             datetime.now() + timedelta(seconds=auth_data.get("TTL", 0))
-    #         ).isoformat(),
-    #         "role": auth_data.get("Role", 1),
-    #     }
+            new_data = {
+                **entry.data,
+                "token": auth_data.get("Token"),
+                "token_id": auth_data.get("TokenId"),
+                "token_expiry": (
+                    datetime.now() + timedelta(seconds=auth_data.get("TTL", 0))
+                ).isoformat(),
+                "role": auth_data.get("Role", 1),
+            }
 
-    #     hass.config_entries.async_update_entry(entry, data=new_data)
+            _LOGGER.debug(
+                "Updating entry with new data: %s",
+                {k: (v if k != "token" else "REDACTED") for k, v in new_data.items()},
+            )
 
-    # except (InimCloudAuthError, InimCloudConnectionError) as err:
-    #     _LOGGER.error("Failed to authenticate: %s", err)
-    #     return False
+            hass.config_entries.async_update_entry(entry, data=new_data)
 
-    # Create update coordinator with token refresh capability
+        except InimCloudAuthError as err:
+            _LOGGER.error("Failed to authenticate: %s", err)
+            return False
+        except Exception as err:
+            _LOGGER.exception("Unexpected error during authentication: %s", err)
+            return False
+
     async def async_update_data():
         """Fetch data from API with token refresh if needed."""
+
+        _LOGGER.info("Fetching devices from Inim Cloud API")
+
         try:
-            # First try with current token
-            return await api.get_alarm_status()
+            async with async_timeout.timeout(30):
+                devices = await api.get_devices()
+                _LOGGER.debug("Fetched %d devices", len(devices))
+                return devices
         except InimCloudAuthError:
-            # Token might be expired, try to re-authenticate
             try:
                 auth_data = await api.authenticate(
                     entry.data[CONF_USERNAME],
                     entry.data[CONF_PASSWORD],
-                    entry.data[CONF_PIN],
                 )
+
+                _LOGGER.debug("Re-authentication data: %s", auth_data)
 
                 # Update the stored token
                 new_data = {
@@ -105,32 +117,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
                 hass.config_entries.async_update_entry(entry, data=new_data)
 
-                # Try again with new token
-                return await api.get_alarm_status()
+                return await api.get_devices()
 
             except InimCloudAuthError as err:
-                raise UpdateFailed(f"Error re-authenticating: {err}")
-        # except InimCloudConnectionError as err:
-        #     raise UpdateFailed(f"Error communicating with API: {err}")
+                raise ConfigEntryAuthFailed(f"Error re-authenticating: {err}")
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            raise UpdateFailed(f"Error communicating with API: {err}")
+        except Exception as err:
+            raise UpdateFailed(f"Unexpected error: {err}")
 
     coordinator = DataUpdateCoordinator(
         hass,
         _LOGGER,
         name=DOMAIN,
         update_method=async_update_data,
-        update_interval=timedelta(seconds=30),  # Update every 30 seconds
+        update_interval=timedelta(seconds=30),
     )
 
-    # Fetch initial data
     await coordinator.async_config_entry_first_refresh()
 
-    # Store API and coordinator in hass.data
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,
         COORDINATOR: coordinator,
     }
 
-    # Set up all platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
@@ -138,10 +148,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    # Unload platforms
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    # Clean up
     if unload_ok:
         api = hass.data[DOMAIN][entry.entry_id]["api"]
         await api.close()
