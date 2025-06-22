@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Dict, List
 
@@ -63,6 +64,7 @@ class InimAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
     )
     _attr_code_arm_required = False
     _attr_code_format = None
+    _attr_assumed_state = True  # Enable optimistic updates
 
     def __init__(
         self,
@@ -128,14 +130,47 @@ class InimAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
     @property
     def alarm_state(self) -> AlarmControlPanelState | None:
         """Return the current alarm state using the AlarmControlPanelState enum."""
+        if hasattr(self, "_attr_alarm_state") and self._attr_alarm_state is not None:
+            _LOGGER.debug(
+                "Using optimistic state '%s' for device %s",
+                self._attr_alarm_state,
+                self._attr_name,
+            )
+            return self._attr_alarm_state
+
         device = self._find_device_in_coordinator()
         if not device:
             _LOGGER.warning("Device %s not found in coordinator data", self._device_id)
             return None
 
         active_scenario = device.get("active_scenario")
-        state = SCENARIO_STATE_MAP.get(str(active_scenario))
-        _LOGGER.debug("Device %s current state: '%s'", self._attr_name, state)
+        _LOGGER.debug(
+            "Device %s active scenario ID: %s", self._attr_name, active_scenario
+        )
+
+        scenario_str = str(active_scenario) if active_scenario is not None else None
+
+        state = SCENARIO_STATE_MAP.get(scenario_str)
+
+        if state is None:
+            _LOGGER.warning(
+                "No state mapping found for scenario ID: %s, defaulting to DISARMED",
+                active_scenario,
+            )
+            state = AlarmControlPanelState.DISARMED
+        else:
+            _LOGGER.debug(
+                "Device %s scenario ID %s mapped to state: '%s'",
+                self._attr_name,
+                active_scenario,
+                state,
+            )
+
+        if hasattr(self, "_attr_alarm_state") and self._attr_alarm_state is not None:
+            _LOGGER.debug(
+                "Clearing optimistic state, now using actual state: %s", state
+            )
+            self._attr_alarm_state = None
 
         return state
 
@@ -146,13 +181,23 @@ class InimAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
 
         if self._disarm_scenario_id is not None:
             try:
+                _LOGGER.debug("Setting optimistic state to DISARMED")
+                self._attr_alarm_state = AlarmControlPanelState.DISARMED
+                self.async_write_ha_state()
+
+                _LOGGER.debug("Sending disarm command to API")
                 await self._api.activate_scenario(
                     self._device_id, self._disarm_scenario_id
                 )
 
                 await self.coordinator.async_request_refresh()
+                await asyncio.sleep(2)
+                self.clear_internal_state()
+
             except Exception as err:
                 _LOGGER.error("Error disarming system: %s", err)
+                self.clear_internal_state()
+                await self.coordinator.async_request_refresh()
         else:
             _LOGGER.error(
                 "Cannot disarm - no disarm scenario ID found for device %s",
@@ -166,13 +211,23 @@ class InimAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
 
         if self._arm_home_scenario_id is not None:
             try:
+                _LOGGER.debug("Setting optimistic state to ARM_HOME")
+                self._attr_alarm_state = AlarmControlPanelState.ARMED_HOME
+                self.async_write_ha_state()
+
+                _LOGGER.debug("Sending arm home command to API")
                 await self._api.activate_scenario(
                     self._device_id, self._arm_home_scenario_id
                 )
 
                 await self.coordinator.async_request_refresh()
+                await asyncio.sleep(2)
+                self.clear_internal_state()
+
             except Exception as err:
                 _LOGGER.error("Error arming system (home): %s", err)
+                self.clear_internal_state()
+                await self.coordinator.async_request_refresh()
         else:
             _LOGGER.error(
                 "Cannot arm home - no arm home scenario ID found for device %s",
@@ -186,15 +241,31 @@ class InimAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
 
         if self._arm_away_scenario_id is not None:
             try:
+                _LOGGER.debug("Setting optimistic state to ARM_AWAY")
+                self._attr_alarm_state = AlarmControlPanelState.ARMED_AWAY
+                self.async_write_ha_state()
+
+                _LOGGER.debug("Sending arm away command to API")
                 await self._api.activate_scenario(
                     self._device_id, self._arm_away_scenario_id
                 )
 
                 await self.coordinator.async_request_refresh()
+                await asyncio.sleep(2)
+                self.clear_internal_state()
+
             except Exception as err:
                 _LOGGER.error("Error arming system (away): %s", err)
+                self.clear_internal_state()
+                await self.coordinator.async_request_refresh()
         else:
             _LOGGER.error(
                 "Cannot arm away - no arm away scenario ID found for device %s",
                 self._device_id,
             )
+
+    def clear_internal_state(self) -> None:
+        """Clear the internal state of the entity."""
+        _LOGGER.debug("Clearing internal state for device %s", self._device_id)
+        self._attr_alarm_state = None
+        self.async_write_ha_state()

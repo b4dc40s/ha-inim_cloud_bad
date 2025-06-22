@@ -93,7 +93,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             async with async_timeout.timeout(30):
                 devices = await api.get_devices()
+
                 _LOGGER.debug("Fetched %d devices", len(devices))
+
+                for device in devices:
+                    _LOGGER.debug(
+                        "Device: %s (ID: %s), Active Scenario: %s",
+                        device.get("name", "Unknown"),
+                        device.get("id", "Unknown"),
+                        device.get("active_scenario", "Unknown"),
+                    )
+
                 return devices
         except InimCloudAuthError:
             try:
