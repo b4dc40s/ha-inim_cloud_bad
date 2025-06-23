@@ -170,11 +170,11 @@ class InimAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
                     self._device_id, self._disarm_scenario_id
                 )
 
-                await self.coordinator.async_request_refresh()
+                await self.coordinator.async_refresh()
 
             except Exception as err:
                 _LOGGER.error("Error disarming system: %s", err)
-                await self.coordinator.async_request_refresh()
+                await self.coordinator.async_refresh()
         else:
             _LOGGER.error(
                 "Cannot disarm - no disarm scenario ID found for device %s",
@@ -193,11 +193,11 @@ class InimAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
                     self._device_id, self._arm_home_scenario_id
                 )
 
-                await self.coordinator.async_request_refresh()
+                await self.coordinator.async_refresh()
 
             except Exception as err:
                 _LOGGER.error("Error arming system (home): %s", err)
-                await self.coordinator.async_request_refresh()
+                await self.coordinator.async_refresh()
         else:
             _LOGGER.error(
                 "Cannot arm home - no arm home scenario ID found for device %s",
@@ -216,11 +216,11 @@ class InimAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
                     self._device_id, self._arm_away_scenario_id
                 )
 
-                await self.coordinator.async_request_refresh()
+                await self.coordinator.async_refresh()
 
             except Exception as err:
                 _LOGGER.error("Error arming system (away): %s", err)
-                await self.coordinator.async_request_refresh()
+                await self.coordinator.async_refresh()
         else:
             _LOGGER.error(
                 "Cannot arm away - no arm away scenario ID found for device %s",
