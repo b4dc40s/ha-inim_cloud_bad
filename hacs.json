@@ -1,0 +1,7 @@
+{
+	"name": "Inim Cloud",
+	"content_in_root": false,
+	"render_readme": true,
+	"country": ["EU", "IL"],
+	"homeassistant": "2025.6.0"
+}
