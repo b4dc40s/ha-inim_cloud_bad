@@ -16,7 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
-from .api import InimCloudAPI, InimCloudAuthError, InimCloudError
+from .api import InimCloudAPI, InimCloudAuthError
 from .const import CONF_PASSWORD, CONF_USERNAME, COORDINATOR, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,7 +27,6 @@ PLATFORMS = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Inim Cloud from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-
     _LOGGER.info("Setting up Inim Cloud integration")
 
     client_id = entry.data.get("client_id")
@@ -87,7 +86,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def async_update_data():
         """Fetch data from API with token refresh if needed."""
-
         _LOGGER.info("Fetching devices from Inim Cloud API")
 
         try:
@@ -95,7 +93,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 devices = await api.get_devices()
 
                 _LOGGER.debug("Fetched %d devices", len(devices))
-
                 for device in devices:
                     _LOGGER.debug(
                         "Device: %s (ID: %s), Active Scenario: %s",
@@ -105,6 +102,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     )
 
                 return devices
+
         except InimCloudAuthError:
             try:
                 auth_data = await api.authenticate(
@@ -114,7 +112,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
                 _LOGGER.debug("Re-authentication data: %s", auth_data)
 
-                # Update the stored token
                 new_data = {
                     **entry.data,
                     "token": auth_data.get("Token"),
@@ -158,7 +155,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
