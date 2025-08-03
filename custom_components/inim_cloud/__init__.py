@@ -2,44 +2,43 @@
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
 import json
+
 import async_timeout
 import aiohttp
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import (
+    DataUpdateCoordinator,
+    UpdateFailed,
+)
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .api import InimCloudAPI, InimCloudAuthError, InimCloudError
 from .const import CONF_USERNAME, CONF_PASSWORD, COORDINATOR, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-
 PLATFORMS = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Inim Cloud from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     _LOGGER.info("Setting up Inim Cloud integration")
 
     client_id = entry.data.get("client_id")
     token = entry.data.get("token")
     token_expiry = None
-    if "token_expiry" in entry.data:
+    if entry.data.get("token_expiry"):
         try:
             token_expiry = datetime.fromisoformat(entry.data["token_expiry"])
         except (ValueError, TypeError):
             token_expiry = None
 
-    api = InimCloudAPI(
-        hass, client_id=client_id, token=token, token_expiry=token_expiry
-    )
-
+    api = InimCloudAPI(hass, client_id=client_id, token=token, token_expiry=token_expiry)
     need_auth = True
     if api.is_token_valid():
         try:
@@ -51,37 +50,51 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if need_auth:
         try:
-            _LOGGER.debug("Token expired or invalid, re-authenticating")
-            auth_data = await api.authenticate(
-                entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD]
-            )
-
-            new_data = { ... }
+            _LOGGER.debug("Re‑authenticating with cloud")
+            auth_data = await api.authenticate(entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD])
+            new_data = {
+                **entry.data,
+                "token": auth_data.get("Token"),
+                "token_id": auth_data.get("TokenId"),
+                "token_expiry": (
+                    datetime.now() + timedelta(seconds=auth_data.get("TTL", 0))
+                ).isoformat(),
+                "role": auth_data.get("Role", 1),
+            }
             hass.config_entries.async_update_entry(entry, data=new_data)
-
         except InimCloudAuthError as err:
             _LOGGER.error("Failed to authenticate: %s", err)
             return False
         except Exception as err:
-            _LOGGER.exception("Unexpected error during authentication: %s", err)
+            _LOGGER.exception("Unexpected error: %s", err)
             return False
 
     async def async_update_data():
-        """Fetch devices and latest alarm events."""
-        _LOGGER.info("Fetching devices from Inim Cloud API")
-        devices = await api.get_devices()
-
-        # ───── Nuova logica eventi ─────
+        """Fetch data and optionally poll alarm flags."""
         try:
-            alerts = await api.get_alerts()
-            latest_alerts = {e.get("DeviceId"): e for e in alerts if e.get("Type") == "Alarm"}
-        except Exception:
-            latest_alerts = {}
+            # Step 1: Get list of device IDs
+            raw_devices = await api.get_devices()
+        except InimCloudAuthError as err:
+            raise ConfigEntryAuthFailed(f"Error retrieving devices: {err}")
+        except (aiohttp.ClientError, async_timeout.TimeoutError) as err:
+            raise UpdateFailed(f"Network error fetching devices: {err}")
+        except Exception as err:
+            raise UpdateFailed(f"Uncaught error: {err}")
 
-        for dev in devices:
-            dev["triggered"] = bool(latest_alerts.get(dev.get("id")))
-        # ─────────────────────────────────
+        # Attempt a RequestPoll for each device
+        for dev in raw_devices:
+            try:
+                await api.request_poll(dev["id"])
+            except Exception as exc:
+                _LOGGER.debug("RequestPoll failed for device %s: %s", dev["id"], exc)
 
+        try:
+            # Refresh device list after poll
+            devices = await api.get_devices()
+        except Exception as err:
+            raise UpdateFailed(f"Failed re‑fetching post‑poll: {err}")
+
+        _LOGGER.debug("Fetched %d devices after poll", len(devices))
         return devices
 
     coordinator = DataUpdateCoordinator(
@@ -93,17 +106,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     await coordinator.async_config_entry_first_refresh()
-
-    hass.data[DOMAIN][entry.entry_id] = {
-        "api": api,
-        COORDINATOR: coordinator,
-    }
+    hass.data[DOMAIN][entry.entry_id] = {"api": api, COORDINATOR: coordinator}
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         api = hass.data[DOMAIN][entry.entry_id]["api"]
