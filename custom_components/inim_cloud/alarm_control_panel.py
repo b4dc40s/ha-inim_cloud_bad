@@ -90,25 +90,25 @@ class InimAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
         self._arm_away_scenario_id = None
         self._arm_home_scenario_id = None
 
-        for scenario in self._scenarios:
-            scenario_id = scenario.get("id")
-            scenario_name = scenario.get("name", "").lower()
+    for scenario in self._scenarios:
+    scenario_id = scenario.get("id")
+    scenario_name = scenario.get("name", "").lower()
 
-            if scenario_name in ["arm", "away"]:
-                self._arm_away_scenario_id = scenario_id
-                _LOGGER.debug(
-                    "Mapped '%s' to ARM_AWAY with ID %s", scenario_name, scenario_id
-                )
-            elif scenario_name in ["stay", "home", "partial"]:
-                self._arm_home_scenario_id = scenario_id
-                _LOGGER.debug(
-                    "Mapped '%s' to ARM_HOME with ID %s", scenario_name, scenario_id
-                )
-            elif scenario_name in ["disarm", "off"]:
-                self._disarm_scenario_id = scenario_id
-                _LOGGER.debug(
-                    "Mapped '%s' to DISARM with ID %s", scenario_name, scenario_id
-                )
+    if scenario_name in ["arm", "away", "totale"]:
+        self._arm_away_scenario_id = scenario_id
+        _LOGGER.debug(
+            "Mapped '%s' to ARM_AWAY with ID %s", scenario_name, scenario_id
+        )
+    elif scenario_name in ["stay", "home", "partial", "indoor"]:
+        self._arm_home_scenario_id = scenario_id
+        _LOGGER.debug(
+            "Mapped '%s' to ARM_HOME with ID %s", scenario_name, scenario_id
+        )
+    elif scenario_name in ["disarm", "off", "sblocca"]:
+        self._disarm_scenario_id = scenario_id
+        _LOGGER.debug(
+            "Mapped '%s' to DISARM with ID %s", scenario_name, scenario_id
+        )
 
     def _find_device_in_coordinator(self) -> Dict[str, Any] | None:
         """Find this device in coordinator data."""
