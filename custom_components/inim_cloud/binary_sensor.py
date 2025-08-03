@@ -43,6 +43,7 @@ class InimAlarmTriggeredSensor(CoordinatorEntity, BinarySensorEntity):
     _attr_device_class = BinarySensorDeviceClass.SAFETY
 
     def __init__(self, coordinator, entry, device):
+        _LOGGER.warning("🧪 InimAlarmTriggeredSensor initialized for device: %s", device)
         super().__init__(coordinator)
         self._entry = entry
         self._device_id = device["id"]
