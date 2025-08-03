@@ -14,7 +14,6 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
-
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -46,7 +45,6 @@ class InimCloudAPI:
 
     @property
     def _default_params(self) -> dict[str, Any]:
-        """Get default parameters for API requests."""
         return {
             "Node": "inimhome",
             "Name": "it.inim.inimutenti",
@@ -60,13 +58,67 @@ class InimCloudAPI:
 
     @property
     def _default_headers(self) -> dict[str, str]:
-        """Get default headers for API requests."""
         return {
             "Accept": "*/*",
             "Accept-Language": "en-GB,en;q=0.9",
             "User-Agent": "inimhome/377 CFNetwork/3826.500.131 Darwin/24.5.0",
         }
 
+    async def authenticate(self, username: str, password: str) -> dict[str, Any]:
+        ...
+        # (rest of authenticate() unchanged)
+        ...
+
+    async def validate_token(self) -> bool:
+        ...
+        # (rest of validate_token as original)
+        ...
+
+    def is_token_valid(self) -> bool:
+        ...
+
+    async def get_devices(self) -> list[dict[str, Any]]:
+        ...
+        # (rest of get_devices as original)
+        ...
+
+    async def activate_scenario(self, device_id: str | int, scenario_id: str | int) -> dict[str, Any]:
+        ...
+        # (original code)
+        ...
+
+    async def get_active_scenario(self, device_id: str) -> dict[str, Any]:
+        ...
+        # (original code)
+        ...
+
+    # ─────── Nuovo metodo aggiunto ───────
+    async def get_alerts(self) -> list[dict[str, Any]]:
+        """Fetch recent alarm events from Inim Cloud."""
+        payload = {
+            **self._default_params,
+            "Method": "GetAlerts",
+            "Params": {"Limit": 10},
+        }
+        try:
+            async with async_timeout.timeout(10):
+                response = await self.session.get(
+                    self.base_url,
+                    params={"req": json.dumps(payload)},
+                    headers=self._default_headers,
+                )
+                response.raise_for_status()
+                data = await response.json()
+        except Exception as exc:
+            _LOGGER.debug("get_alerts(): fallito %s", exc)
+            return []
+
+        if data.get("Status") != 0:
+            _LOGGER.warning("get_alerts(): errore cloud %s", data.get("ErrMsg"))
+            return []
+
+        return data.get("Data", {}).get("Events", [])
+    # ───────────────────────────────────────────
     async def authenticate(self, username: str, password: str) -> dict[str, Any]:
         """Authenticate with Inim Cloud and return auth data."""
 
