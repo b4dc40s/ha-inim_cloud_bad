@@ -49,10 +49,22 @@ class InimAlarmTriggeredSensor(CoordinatorEntity, BinarySensorEntity):
         self._device = device
         self._attr_unique_id = f"{entry.entry_id}_alarm_triggered"
 
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, f"{entry.entry_id}_{self._device_id}")},
+            "name": self._device.get("name", "Inim Alarm"),
+            "manufacturer": "Inim",
+            "model": "Cloud Alarm",
+        }
+
     @property
     def is_on(self) -> bool:
         """Return true if alarm is currently triggered."""
         device = next((d for d in self.coordinator.data if d["id"] == self._device_id), None)
+        _LOGGER.debug("🔍 Inim device data: %s", device)
+
         if device and "ares" in device:
+            for area in device["ares"]:
+                _LOGGER.debug("📦 Area: %s", area)
             return any(area.get("alarm") for area in device["ares"])
+
         return False
